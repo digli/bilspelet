@@ -1,0 +1,316 @@
+<!doctype html>
+<html>
+<head>
+<title>testspel</title>
+<meta charset="utf-8">
+<script src="pixi.min.js"></script>
+<script src="zoomer.js"></script>
+<script src="car.js"></script>
+<script src="track.js"></script>
+<style>
+body {
+	margin: 0;
+	overflow: hidden;
+	height: 100%;
+	background-color: #000;
+	font-family: monospace;
+	color: #ccc;
+}
+
+button {
+	border: none;
+	cursor: pointer;
+	background: none;
+	font-family: monospace;
+	color: #0c0;
+	text-decoration: underline;
+	margin-right: 20px;
+}
+
+#toggler {
+	position: absolute;
+	top: 50px;
+	left: calc(50% - 300px);
+	width: 600px;
+}
+
+#toggler textarea {
+	width: 100%;
+	max-width: 100%;
+	color: #ccc;
+	background-color: #030;
+	height: 100px;
+}
+
+#left-col {
+	position: absolute;
+	width: 200px;
+	left: calc(50% - 610px);
+	text-align: right;
+	top: 10px;
+	white-space: pre;
+}
+
+#right-col {
+	position: absolute;
+	width: 200px;
+	left: calc(50% + 410px);
+	top: 10px;
+	white-space: pre;
+}
+
+#game {
+	line-height: 0;
+	margin: 5px auto;
+	outline: 1px solid #ccc;
+	height: 100%;
+	width: 800px;
+}
+
+span.key {color: #0c0;}
+a {color: #ff0fff;}
+#best-time {color: #ffa500;}
+
+</style>
+</head>
+<body>
+<div id="left-col">CAR GAME
+alpha
+
+<a href="javascript:track.importCoords(exampleTrack)">example track 1</a>
+<a href="javascript:track.importCoords(example2)">example track 2</a>
+
+<a href="javascript:toggleImporter()">import track coordinates</a>
+<a href="javascript:toggleExporter()">export track coordinates</a>
+
+<a href="javascript:track.clear()">draw new track</a>
+
+<!-- <span class="key">p</span>:               pause -->
+Phase one: draw track
+
+<span class="key">arrow keys</span>:   movement
+<span class="key">space</span>:   connect track
+<span class="key">r</span>:         clear track
+<span class="key">z</span>:       start driving
+
+
+Phase two: drive
+
+<span class="key">arrow keys</span>:   movement
+<span class="key">r</span>:             restart
+
+velocity:
+<span id="velocity">0</span></div>
+<div id="toggler"></div>
+<div id="game"></div>
+<div id="right-col">best time
+<span id="best-time">N/A</span>
+
+lap times
+<span id="lap-times"></span>
+</div>
+
+
+<script>
+
+"use strict";
+
+var exampleTrack = "[[400,400],[397,393.64],[401.36,389.28],[410.64,389.28],[417.28,395.92],[417.28,399.92],[413.28,403.92],[406.56,403.92],[401.28,409.2],[401.28,411.92],[407.92,411.92],[410.64,414.64],[410.64,418.56],[401.28,427.92],[369.28,427.92],[366.64,424.28],[366.64,417.2],[369.28,414.56],[381.28,414.56],[385.2,410.64],[385.2,403.92],[381.2,399.92],[377.2,399.92],[373.56,396.28],[375.92,390.28],[381.12,388.08],[387.84,388.08],[395.84,380.08],[403.84,380.08],[405,397]]";
+
+var example2 = "[[400,400],[400,408],[396,412],[384,412],[380,408],[380,400],[386.66,393.34],[397.34,393.34],[414.69,410.69],[414.69,418.69],[397.38,436],[397.38,441.34],[400.04,444],[409.38,444],[430.71,422.66],[430.71,416],[414.7,399.99],[414.7,386.66],[425.36,376],[436.02,376],[441.37,381.34],[441.37,385.34],[437.37,389.33],[428.03,389.33],[414.7,376],[414.7,361.34],[412.01,358.65],[394.69,358.65],[389.37,363.97],[389.37,370.64],[393.37,374.64],[398.7,374.64],[404.04,369.3],[404.04,358.64],[398.71,353.31],[385.36,353.31],[369.38,369.29],[369.38,383.97],[374.7,389.3],[393.37,389.3]]";
+
+var width = 800;
+var height = 800;
+var start = {x: width / 2, y: height / 2};
+var drawer = {x: start.x, y: start.y};
+var move = {x: 0, y: 0};
+var lapTimes = [];
+var bestTime = 1000000;
+var direction = {left: false, up: false, right: false, down: false};
+var prevDirection = direction;
+var drivingTime = false;
+var mappingTime = true;
+var drawSpeed = 0.08;
+var gfx = new PIXI.Graphics();
+var track = new Track();
+var movementLog = [];
+var bestLog = [];
+var prevTime = 0;
+var lapStart;
+
+var velocitySpan = document.getElementById("velocity");
+var lapTimeSpan = document.getElementById("lap-times");
+var toggler = document.getElementById("toggler");
+var renderer = PIXI.autoDetectRenderer(width, height, {antialias: true});
+document.getElementById("game").appendChild(renderer.view);
+var stage = new PIXI.Container();
+var zoomer = new Zoomer(stage);
+zoomer.doneZooming = startLap;
+
+var car = new Car(new PIXI.Sprite.fromImage("car2.png"));
+
+var paused = false;
+
+var cars = [];
+
+window.addEventListener("load", init);
+
+function init() {
+	stage.addChild(gfx);
+	gfx.lineStyle(3, 0xff0fff, 1);
+	gfx.beginFill(0xff0fff);
+
+	window.addEventListener("keyup", onKeyUp);
+	window.addEventListener("keydown", onKeyDown);
+
+	animate();
+}
+
+function startLap() {
+	drivingTime = true;
+	lapStart = prevTime;
+}
+
+function restart() {
+	if (mappingTime) {
+		track.clear();
+		if (move.x || move.y) track.addPoint();
+		move.x = move.y = 0;
+		return;
+	} else if (!drivingTime) return;
+
+	track.clearCheckpoints();
+	stage.removeChild(car);
+	mappingTime = false;
+	drivingTime = false;
+	movementLog = [];
+	track.redraw();
+	zoomer.zoomOut();
+	zoomer.zoomIn();
+}
+
+function updateCar(dt) {
+	if (!drivingTime) return;
+
+	car.update(move, dt);
+	var velocity = car.velocity();
+	zoomer.setScaleFromSpeed(velocity, car);
+	velocitySpan.innerHTML = Math.round(velocity * 1000) + " px/s";
+}
+
+function updateMapping(dt, changed) {
+	if (!mappingTime) return;
+
+	gfx.moveTo(drawer.x, drawer.y);
+	drawer.x += dt * move.x * drawSpeed;
+	drawer.y += dt * move.y * drawSpeed;
+	if (move.x || move.y) gfx.lineTo(drawer.x, drawer.y);
+}
+
+function updateMovement() {
+	move.x = direction.right ? 1 : direction.left ? -1 : 0;
+	move.y = direction.up ? -1 : direction.down ? 1 : 0;
+
+	var change = false;
+	for (var i in prevDirection) change = change || prevDirection[i] !== direction[i];
+	if ((move.x || move.y) && change) {
+		track.addPoint();
+		// logMovement();
+	}
+
+	prevDirection = JSON.parse(JSON.stringify(direction));
+}
+
+function logMovement() {
+	if (!drivingTime) return;
+
+	movementLog.push({
+		time: prevTime, 
+		moveX: move.x, 
+		moveY: move.y,
+		speed: car.getSpeed(),
+		coords: car.getCoords()
+	});
+}
+
+function animate(timestamp) {
+	requestAnimationFrame(animate);
+	if (isNaN(timestamp)) return;
+	var dt = timestamp - prevTime;
+	prevTime = timestamp;
+	if (paused) return;
+
+	updateMovement();
+	updateMapping(dt);
+	updateCar(dt);
+	zoomer.animate();
+	renderer.render(stage);
+}
+
+function onKeyDown(e) {
+	var key = e.keyCode;
+	if (key === 37) direction.left = true;
+	if (key === 38) direction.up = true;
+	if (key === 39) direction.right = true;
+	if (key === 40) direction.down = true;
+	if (key === 32) track.connect();
+	if (key === 90) zoomer.zoomIn();
+	if (key === 82) restart();
+	if (key === 80) paused = !paused;
+}
+
+function onKeyUp(e) {
+	var key = e.keyCode;
+	if (key === 37) direction.left = false;
+	if (key === 38) direction.up = false;
+	if (key === 39) direction.right = false;
+	if (key === 40) direction.down = false;
+}
+
+function mod(n, m) {
+	return ((n % m) + m) % m;
+}
+
+function toggleImporter() {
+	clearToggler();
+
+	var input = toggler.appendChild(document.createElement("textarea"));
+	input.placeholder = "paste track coordinates here";
+	var importButton = document.createElement("button");
+	importButton.innerHTML = "import";
+	var closeButton = document.createElement("button");
+	closeButton.innerHTML = "close";
+	toggler.appendChild(closeButton);
+	toggler.appendChild(importButton);
+
+	importButton.onclick = function() {
+		try {
+			track.importCoords(input.value);
+			clearToggler();
+		} catch (e) {
+			alert(e);
+		}
+	};
+
+	closeButton.onclick = clearToggler;
+}
+
+function toggleExporter() {
+	clearToggler();
+
+	toggler.innerHTML = "copy this and send to your friends";
+	var input = toggler.appendChild(document.createElement("textarea"));
+	input.value = track.exportCoords();
+	var button = document.createElement("button");
+	button.innerHTML = "close";
+	toggler.appendChild(button);
+	button.onclick = clearToggler;
+}
+
+function clearToggler() {
+	while (toggler.firstChild) toggler.removeChild(toggler.firstChild);
+}
+
+</script>
+</body>
+</html>
