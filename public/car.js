@@ -41,13 +41,4 @@ var Car = function(sprite) {
 	this.velocity = function() {
 		return Math.sqrt(speed.x * speed.x + speed.y * speed.y);
 	}
-
-	this.getCoords = function() {
-		return {x: sprite.x, y: sprite.y};
-	}
-
-	this.getSpeed = function() {
-		return {x: speed.x, y: speed.y};
-	}
-
 }

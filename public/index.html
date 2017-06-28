@@ -133,7 +133,6 @@ var mappingTime = true;
 var drawSpeed = 0.08;
 var gfx = new PIXI.Graphics();
 var track = new Track();
-var movementLog = [];
 var bestLog = [];
 var prevTime = 0;
 var lapStart;
@@ -183,7 +182,6 @@ function restart() {
 	stage.removeChild(car);
 	mappingTime = false;
 	drivingTime = false;
-	movementLog = [];
 	track.redraw();
 	zoomer.zoomOut();
 	zoomer.zoomIn();
@@ -215,22 +213,9 @@ function updateMovement() {
 	for (var i in prevDirection) change = change || prevDirection[i] !== direction[i];
 	if ((move.x || move.y) && change) {
 		track.addPoint();
-		// logMovement();
 	}
 
 	prevDirection = JSON.parse(JSON.stringify(direction));
-}
-
-function logMovement() {
-	if (!drivingTime) return;
-
-	movementLog.push({
-		time: prevTime, 
-		moveX: move.x, 
-		moveY: move.y,
-		speed: car.getSpeed(),
-		coords: car.getCoords()
-	});
 }
 
 function animate(timestamp) {

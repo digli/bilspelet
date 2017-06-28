@@ -74,11 +74,9 @@ var Track = function() {
 
 			if (lapTime < bestTime) {
 				bestTime = lapTime;
-				bestLog = movementLog.slice();
 				document.getElementById("best-time").innerHTML = lapTime + " s";
 			}
 
-			movementLog = [];
 			this.redraw();
 			lapTimeSpan.innerHTML += lapTimes[lapTimes.length - 1] + " s\n";
 			for (var i in coords) coords[i].checked = false;
